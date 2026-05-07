@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/game_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   runApp(const ColorMatchApp());
@@ -15,12 +15,10 @@ class ColorMatchApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF4081),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF4081)),
         scaffoldBackgroundColor: const Color(0xFFFCE4EC),
       ),
-      home: const GameScreen(),
+      home: const HomeScreen(),
     );
   }
 }
