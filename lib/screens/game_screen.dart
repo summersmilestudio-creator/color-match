@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../widgets/banner_ad_widget.dart';
+import '../services/ads_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -92,6 +94,7 @@ class _GameScreenState extends State<GameScreen> {
     if (_moves == 0) {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!mounted) return;
+        AdsService.instance.maybeShowInterstitial();
         showDialog(
           context: context,
           builder: (c) => AlertDialog(
@@ -136,6 +139,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const BannerAdWidget(),
       appBar: AppBar(
         title: const Text('Color Match'),
         backgroundColor: const Color(0xFFFF4081),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/banner_ad_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/rewards_service.dart';
 import 'daily_reward_screen.dart';
@@ -46,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const BannerAdWidget(),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
