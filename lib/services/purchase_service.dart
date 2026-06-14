@@ -34,14 +34,22 @@ class PurchaseService {
 
   static const _kNoAdsKey = 'noAds_color';
 
-  /// iOS uses a suffixed product id ('noads_color'); Android uses the plain id.
-  static String _platformId(String logicalId) =>
-      Platform.isIOS ? '${logicalId}_color' : logicalId;
+  /// The iOS "remove ads" product is configured in App Store Connect as
+  /// `colormatch_remove_ads`; Android uses the plain logical id.
+  static const String _iosNoAdsId = 'colormatch_remove_ads';
 
-  static String _logicalId(String platformId) =>
-      platformId.endsWith('_color')
-          ? platformId.substring(0, platformId.length - 6)
-          : platformId;
+  static String _platformId(String logicalId) {
+    if (!Platform.isIOS) return logicalId;
+    if (logicalId == noAdsId) return _iosNoAdsId;
+    return '${logicalId}_color';
+  }
+
+  static String _logicalId(String platformId) {
+    if (platformId == _iosNoAdsId) return noAdsId;
+    return platformId.endsWith('_color')
+        ? platformId.substring(0, platformId.length - 6)
+        : platformId;
+  }
 
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _sub;
