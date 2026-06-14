@@ -1,20 +1,15 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../game/skins.dart';
 import '../widgets/banner_ad_widget.dart';
+import '../widgets/game_juice.dart';
 import '../services/ads_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const int kCols = 8;
 const int kRows = 10;
-const _palette = [
-  Color(0xFFE53935),
-  Color(0xFF1E88E5),
-  Color(0xFF43A047),
-  Color(0xFFFFB300),
-  Color(0xFF8E24AA),
-  Color(0xFF00ACC1),
-];
+const int kColors = 6;
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -28,6 +23,7 @@ class _GameScreenState extends State<GameScreen> {
   int _score = 0;
   int _high = 0;
   int _moves = 30;
+  bool _coinsAwarded = false;
   final _rng = Random();
 
   @override
@@ -52,12 +48,12 @@ class _GameScreenState extends State<GameScreen> {
 
   void _newGame() {
     _grid = List.generate(kRows, (_) =>
-        List.generate(kCols, (_) => _rng.nextInt(_palette.length)));
+        List.generate(kCols, (_) => _rng.nextInt(kColors)));
     _score = 0;
     _moves = 30;
+    _coinsAwarded = false;
   }
 
-  // Find connected blob from (r,c)
   Set<Point<int>> _findBlob(int r, int c, int color) {
     final visited = <Point<int>>{};
     final stack = [Point(c, r)];
@@ -81,6 +77,7 @@ class _GameScreenState extends State<GameScreen> {
     final blob = _findBlob(r, c, color);
     if (blob.length < 3) return;
     HapticFeedback.mediumImpact();
+    if (blob.length >= 6) Celebrate.show(context);
     setState(() {
       for (final p in blob) {
         _grid[p.y][p.x] = -1;
@@ -92,6 +89,11 @@ class _GameScreenState extends State<GameScreen> {
     });
     _saveHigh();
     if (_moves == 0) {
+      final earned = (_score ~/ 100).clamp(0, 999);
+      if (!_coinsAwarded) {
+        _coinsAwarded = true;
+        if (earned > 0) SkinStore.instance.addCoins(earned);
+      }
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!mounted) return;
         AdsService.instance.maybeShowInterstitial();
@@ -99,7 +101,7 @@ class _GameScreenState extends State<GameScreen> {
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('Joc terminat'),
-            content: Text('Scor final: $_score${_score == _high ? "\n🏆 Record nou!" : ""}'),
+            content: Text('Scor final: $_score${_score == _high ? "\n🏆 Record nou!" : ""}\n+$earned monede 🪙'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -108,11 +110,51 @@ class _GameScreenState extends State<GameScreen> {
                 },
                 child: const Text('Joc nou'),
               ),
+              TextButton.icon(
+                icon: const Icon(Icons.play_circle, color: Color(0xFFFFD740)),
+                label: const Text('+15 mutări 🎁',
+                    style: TextStyle(color: Color(0xFFFFD740))),
+                onPressed: () async {
+                  Navigator.pop(c);
+                  await _watchAdForBonusMoves();
+                },
+              ),
             ],
           ),
         );
       });
     }
+  }
+
+  Future<void> _watchAdForBonusMoves() async {
+    final got = await AdsService.instance.showRewarded();
+    if (!mounted || !got) return;
+    setState(() {
+      _moves += 15;
+      _coinsAwarded = false;
+    });
+    final p = await SharedPreferences.getInstance();
+    final cur = p.getInt('colorMax') ?? 0;
+    await p.setInt('colorMax', cur + 2);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('🎁 +15 mutări adăugate! Continuă să joci.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _watchAdToSkip() async {
+    final got = await AdsService.instance.showRewarded();
+    if (!mounted || !got) return;
+    setState(() => _moves += 10);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⏭️ +10 mutări bonus!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _gravity() {
@@ -131,89 +173,111 @@ class _GameScreenState extends State<GameScreen> {
   void _refill() {
     for (var r = 0; r < kRows; r++) {
       for (var c = 0; c < kCols; c++) {
-        if (_grid[r][c] == -1) _grid[r][c] = _rng.nextInt(_palette.length);
+        if (_grid[r][c] == -1) _grid[r][c] = _rng.nextInt(kColors);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final skin = activeSkinCM();
+    final palette = skin.palette;
     return Scaffold(
       bottomNavigationBar: const BannerAdWidget(),
       appBar: AppBar(
         title: const Text('Color Match'),
-        backgroundColor: const Color(0xFFFF4081),
+        backgroundColor: skin.accent,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
+          IconButton(
+            tooltip: '+10 mutări (urmărește reclamă)',
+            icon: const Icon(Icons.skip_next, color: Color(0xFF69F0AE)),
+            onPressed: _watchAdToSkip,
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() => _newGame())),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _stat('SCOR', '$_score', const Color(0xFFFF4081)),
-                  _stat('TOP', '$_high', const Color(0xFFE91E63)),
-                  _stat('MUTĂRI', '$_moves', const Color(0xFFAD1457)),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
+      body: PremiumBackground(
+        colors: skin.bg,
+        bokeh: skin.bokeh,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
                 padding: const EdgeInsets.all(12),
-                child: AspectRatio(
-                  aspectRatio: kCols / kRows,
-                  child: GridView.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: kCols,
-                      childAspectRatio: 1,
-                      crossAxisSpacing: 3,
-                      mainAxisSpacing: 3,
-                    ),
-                    itemCount: kRows * kCols,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemBuilder: (ctx, i) {
-                      final r = i ~/ kCols;
-                      final c = i % kCols;
-                      final v = _grid[r][c];
-                      return GestureDetector(
-                        onTap: () => _onTap(r, c),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          decoration: BoxDecoration(
-                            color: v == -1 ? Colors.transparent : _palette[v],
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: v >= 0
-                                ? const [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))]
-                                : null,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _stat('SCOR', '$_score'),
+                    _stat('TOP', '$_high'),
+                    _stat('MUTĂRI', '$_moves'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: AspectRatio(
+                    aspectRatio: kCols / kRows,
+                    child: GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: kCols,
+                        childAspectRatio: 1,
+                        crossAxisSpacing: 3,
+                        mainAxisSpacing: 3,
+                      ),
+                      itemCount: kRows * kCols,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemBuilder: (ctx, i) {
+                        final r = i ~/ kCols;
+                        final c = i % kCols;
+                        final v = _grid[r][c];
+                        return GestureDetector(
+                          onTap: () => _onTap(r, c),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            decoration: BoxDecoration(
+                              gradient: v == -1
+                                  ? null
+                                  : LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color.lerp(palette[v], Colors.white, 0.22)!,
+                                        palette[v],
+                                      ],
+                                    ),
+                              color: v == -1 ? Colors.white.withValues(alpha: 0.04) : null,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: v >= 0
+                                  ? [BoxShadow(color: palette[v].withValues(alpha: 0.45), blurRadius: 4, offset: const Offset(0, 1))]
+                                  : null,
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Apasă pe 3+ piese conectate de aceeași culoare',
-                  style: TextStyle(color: Colors.black54, fontSize: 12)),
-            ),
-          ],
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('Apasă pe 3+ piese conectate de aceeași culoare',
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _stat(String label, String value, Color color) {
+  Widget _stat(String label, String value) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
-        Text(value, style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.w900)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
       ],
     );
   }

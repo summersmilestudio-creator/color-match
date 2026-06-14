@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import '../widgets/banner_ad_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../game/skins.dart';
 import '../services/rewards_service.dart';
+import '../widgets/banner_ad_widget.dart';
+import '../widgets/game_juice.dart';
 import 'daily_reward_screen.dart';
 import 'game_screen.dart';
 import 'settings_screen.dart';
+import 'shop_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,7 +18,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _rewards = RewardsService();
-  int _coins = 0;
   int _highScore = 0;
 
   @override
@@ -30,32 +32,27 @@ class _HomeScreenState extends State<HomeScreen> {
       await Navigator.push(context, MaterialPageRoute(
           builder: (_) => DailyRewardScreen(day: r.day, reward: r.reward)));
     }
+    SkinStore.instance.reload();
     _load();
   }
 
   Future<void> _load() async {
-    final c = await _rewards.getCoins();
     final p = await SharedPreferences.getInstance();
     if (mounted) {
-      setState(() {
-        _coins = c;
-        _highScore = p.getInt('colorMatchHigh') ?? 0;
-      });
+      setState(() => _highScore = p.getInt('colorMatchHigh') ?? 0);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final skin = activeSkinCM();
+    final dark = skin.bg.first.computeLuminance() < 0.5;
+    final fg = dark ? Colors.white : const Color(0xFF6A1B4A);
     return Scaffold(
       bottomNavigationBar: const BannerAdWidget(),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFFCE4EC), Color(0xFFF8BBD0), Color(0xFFFCE4EC)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+      body: PremiumBackground(
+        colors: skin.bg,
+        bokeh: skin.bokeh,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -65,38 +62,64 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.settings, color: Color(0xFFFF4081)),
+                      icon: Icon(Icons.settings, color: fg),
                       onPressed: () async {
                         await Navigator.push(context,
                             MaterialPageRoute(builder: (_) => const SettingsScreen()));
                       },
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFFF4081)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.monetization_on, color: Color(0xFFFFAB00), size: 20),
-                          const SizedBox(width: 6),
-                          Text('$_coins',
-                              style: const TextStyle(
-                                  color: Color(0xFFFF4081),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900)),
-                        ],
-                      ),
+                    Row(
+                      children: [
+                        PressableScale(
+                          onTap: () async {
+                            await Navigator.push(context,
+                                MaterialPageRoute(builder: (_) => const ShopScreen()));
+                            setState(() {});
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: skin.accent,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(Icons.palette_rounded,
+                                color: Colors.white, size: 22),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        ListenableBuilder(
+                          listenable: SkinStore.instance,
+                          builder: (context, _) => Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: skin.accent),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.monetization_on,
+                                    color: Color(0xFFFFAB00), size: 20),
+                                const SizedBox(width: 6),
+                                Text('${SkinStore.instance.coins}',
+                                    style: TextStyle(
+                                        color: skin.accent,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w900)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 const Spacer(),
                 ShaderMask(
-                  shaderCallback: (r) => const LinearGradient(
-                    colors: [Color(0xFFFF4081), Color(0xFF7B1FA2)],
+                  shaderCallback: (r) => LinearGradient(
+                    colors: [skin.accent, skin.palette[4]],
                   ).createShader(r),
                   child: const Text('COLOR\nMATCH',
                       textAlign: TextAlign.center,
@@ -108,26 +131,29 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 1.0)),
                 ),
                 const SizedBox(height: 12),
-                const Text('Apasă pe 3+ piese conectate de aceeași culoare',
+                Text('Apasă pe 3+ piese conectate de aceeași culoare',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54)),
-                const SizedBox(height: 32),
+                    style: TextStyle(color: fg.withValues(alpha: 0.85))),
+                const SizedBox(height: 28),
+                _paletteRow(skin),
+                const SizedBox(height: 28),
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFFF4081)),
+                    border: Border.all(color: skin.accent),
                     boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
                   ),
                   child: Column(
                     children: [
-                      const Text('TOP SCORE',
-                          style: TextStyle(color: Colors.black54, fontSize: 12, letterSpacing: 2)),
+                      Text('TOP SCORE',
+                          style: TextStyle(
+                              color: fg.withValues(alpha: 0.7), fontSize: 12, letterSpacing: 2)),
                       const SizedBox(height: 6),
                       Text('$_highScore',
-                          style: const TextStyle(
-                              color: Color(0xFFFF4081),
+                          style: TextStyle(
+                              color: dark ? Colors.white : skin.accent,
                               fontSize: 40,
                               fontWeight: FontWeight.w900)),
                     ],
@@ -138,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF4081),
+                      backgroundColor: skin.accent,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
@@ -148,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () async {
                       await Navigator.push(context,
                           MaterialPageRoute(builder: (_) => const GameScreen()));
+                      SkinStore.instance.reload();
                       _load();
                     },
                     child: const Text('JOC NOU'),
@@ -159,6 +186,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _paletteRow(SkinCM skin) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final c in skin.palette)
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 10)],
+            ),
+          ),
+      ],
     );
   }
 }
