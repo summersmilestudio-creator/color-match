@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import AppTrackingTransparency
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -8,13 +7,8 @@ import AppTrackingTransparency
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Request App Tracking Transparency natively (no CocoaPods plugin needed).
-    // Deferred so the scene is active when the system prompt is shown.
-    if #available(iOS 14, *) {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        ATTrackingManager.requestTrackingAuthorization { _ in }
-      }
-    }
+    // App Tracking Transparency is requested from Dart (TrackingService) after
+    // the first frame, before the ads SDK initialises.
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

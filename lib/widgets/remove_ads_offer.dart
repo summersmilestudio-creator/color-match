@@ -68,9 +68,15 @@ class RemoveAdsOffer {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.of(ctx).pop();
-                    PurchaseService.instance.buy(PurchaseService.noAdsId);
+                    final result = await PurchaseService.instance
+                        .buy(PurchaseService.noAdsId);
+                    final msg = result.message;
+                    if (context.mounted && msg != null) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(msg)));
+                    }
                   },
                   child: Text('Elimină reclamele • $price',
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),

@@ -5,6 +5,7 @@ import 'services/review_service.dart';
 import 'screens/home_screen.dart';
 import 'services/ads_service.dart';
 import 'services/purchase_service.dart';
+import 'services/tracking_service.dart';
 import 'game/skins.dart';
 import 'widgets/remove_ads_offer.dart';
 
@@ -14,7 +15,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await PurchaseService.instance.initialize();
   await SkinStore.instance.init();
-  await AdsService.instance.initialize();
+  // NOTE: ads are NOT initialised here. We first ask for tracking permission
+  // (ATT) after the first frame, then start the ads SDK. See initState below.
   ReviewService.instance.registerLaunch();
   NotificationService.instance.scheduleEvery6Hours(title: 'Color Match Drop', body: 'Potrivește culorile și ține-ți seria! 🎨');
   runApp(const ColorMatchApp());
@@ -35,6 +37,12 @@ class _ColorMatchAppState extends State<ColorMatchApp>
     WidgetsBinding.instance.addObserver(this);
     // Show the upsell right after a full-screen ad (App Open / interstitial) closes.
     AdsService.instance.adClosedTick.addListener(_onAdClosed);
+    // Ask for tracking permission first, THEN initialise ads — so the ATT
+    // prompt appears before any tracking data is collected.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await TrackingService.requestIfNeeded();
+      await AdsService.instance.initialize();
+    });
   }
 
   @override

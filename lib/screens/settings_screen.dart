@@ -52,9 +52,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               backgroundColor: const Color(0xFFFF4081),
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              PurchaseService.instance.buy(PurchaseService.noAdsId);
+              final result =
+                  await PurchaseService.instance.buy(PurchaseService.noAdsId);
+              if (!mounted) return;
+              final msg = result.message;
+              if (msg != null) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(msg)));
+              }
             },
             child: Text('Cumpără • $price',
                 style: const TextStyle(fontWeight: FontWeight.w900)),
