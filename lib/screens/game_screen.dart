@@ -127,7 +127,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _watchAdForBonusMoves() async {
-    final got = await AdsService.instance.showRewarded();
+    final got = await AdsService.instance.showBonusAd();
     if (!mounted || !got) return;
     setState(() {
       _moves += 15;
@@ -146,7 +146,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _watchAdToSkip() async {
-    final got = await AdsService.instance.showRewarded();
+    final got = await AdsService.instance.showBonusAd();
     if (!mounted || !got) return;
     setState(() => _moves += 10);
     ScaffoldMessenger.of(context).showSnackBar(

@@ -1,7 +1,7 @@
 name: color_match
 description: "Color Match — uneste 3+ piese de aceeasi culoare"
 publish_to: 'none'
-version: 1.2.0+13
+version: 1.2.1+14
 environment:
   sdk: ^3.11.1
 

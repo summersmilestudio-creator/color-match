@@ -16,10 +16,15 @@ class AdsService {
   static const String _interstitialAndroid = 'ca-app-pub-5549243085914479/4279130700';
   static const String _rewardedAndroid = 'ca-app-pub-5549243085914479/9151120376';
 
+  // Rewarded Interstitial — cel mai mare eCPM. iOS real (2026-06-15).
+  // Android nu are încă unitate → null (nu se încarcă, fallback la rewarded).
+  static const String _rewardedInterstitialIOS = 'ca-app-pub-5549243085914479/3895388255';
+  static const String _rewardedInterstitialTest = 'ca-app-pub-3940256099942544/5354046379';
+
   // App Open (highest-value launch/return ad). Replace the two prod IDs with the
   // real AdMob App Open units when created.
   static const String _appOpenProdAndroid = 'ca-app-pub-5549243085914479/APPOPEN_ANDROID';
-  static const String _appOpenProdIOS = 'ca-app-pub-5549243085914479/APPOPEN_IOS';
+  static const String _appOpenProdIOS = 'ca-app-pub-5549243085914479/3255923149';
 
   static const String _bannerTest = 'ca-app-pub-3940256099942544/6300978111';
   static const String _interstitialTest = 'ca-app-pub-3940256099942544/1033173712';
@@ -27,8 +32,9 @@ class AdsService {
   static const String _appOpenTestAndroid = 'ca-app-pub-3940256099942544/9257395921';
   static const String _appOpenTestIOS = 'ca-app-pub-3940256099942544/5575463023';
 
-  static const Duration _minInterval = Duration(seconds: 45);
+  static const Duration _minInterval = Duration(seconds: 34);
   static const Duration _appOpenMaxAge = Duration(hours: 4);
+  static const Duration _rewIntCooldown = Duration(minutes: 2);
 
   bool _initialized = false;
   InterstitialAd? _interstitial;
@@ -36,6 +42,9 @@ class AdsService {
   DateTime? _lastInterstitialShown;
   RewardedAd? _rewarded;
   bool _rewardedLoading = false;
+  RewardedInterstitialAd? _rewardedInterstitial;
+  bool _rewardedInterstitialLoading = false;
+  DateTime? _lastRewIntShown;
   AppOpenAd? _appOpen;
   bool _appOpenLoading = false;
   DateTime? _appOpenLoadTime;
@@ -65,6 +74,10 @@ class AdsService {
     if (kDebugMode) return Platform.isIOS ? _appOpenTestIOS : _appOpenTestAndroid;
     return Platform.isIOS ? _appOpenProdIOS : _appOpenProdAndroid;
   }
+  String? get rewardedInterstitialUnitId {
+    if (kDebugMode) return _rewardedInterstitialTest;
+    return Platform.isIOS ? _rewardedInterstitialIOS : null;
+  }
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -73,6 +86,7 @@ class AdsService {
     _initialized = true;
     _loadInterstitial();
     _loadRewarded();
+    _loadRewardedInterstitial();
     loadAppOpen();
   }
 
@@ -204,6 +218,64 @@ class AdsService {
       if (!completer.isCompleted) completer.complete(true);
     });
     return completer.future;
+  }
+
+  // ---- Rewarded Interstitial (eCPM cel mai mare) ----------------------------
+  void _loadRewardedInterstitial() {
+    final id = rewardedInterstitialUnitId;
+    if (id == null) return;
+    if (_rewardedInterstitialLoading || _rewardedInterstitial != null) return;
+    _rewardedInterstitialLoading = true;
+    RewardedInterstitialAd.load(
+      adUnitId: id,
+      request: const AdRequest(),
+      rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
+        onAdLoaded: (ad) { _rewardedInterstitial = ad; _rewardedInterstitialLoading = false; },
+        onAdFailedToLoad: (err) { _rewardedInterstitial = null; _rewardedInterstitialLoading = false; },
+      ),
+    );
+  }
+
+  bool get _rewIntReady => _rewardedInterstitial != null;
+  bool get _rewIntOffCooldown =>
+      _lastRewIntShown == null ||
+      DateTime.now().difference(_lastRewIntShown!) >= _rewIntCooldown;
+
+  Future<bool> _showRewardedInterstitial() async {
+    final ad = _rewardedInterstitial;
+    if (ad == null) { _loadRewardedInterstitial(); return false; }
+    final completer = Completer<bool>();
+    _showingFullScreenAd = true;
+    _lastRewIntShown = DateTime.now();
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (a) {
+        a.dispose(); _rewardedInterstitial = null;
+        _showingFullScreenAd = false;
+        _loadRewardedInterstitial();
+        _notifyAdClosed();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+      onAdFailedToShowFullScreenContent: (a, _) {
+        a.dispose(); _rewardedInterstitial = null;
+        _showingFullScreenAd = false;
+        _loadRewardedInterstitial();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+    );
+    await ad.show(onUserEarnedReward: (_, __) {
+      if (!completer.isCompleted) completer.complete(true);
+    });
+    return completer.future;
+  }
+
+  /// Recompensă opt-in: preferă Rewarded Interstitial (eCPM mult mai mare) când
+  /// e disponibil și off-cooldown, altfel cade pe Rewarded normal. Apelat doar
+  /// din butoane „vezi reclamă" => conform politicii AdMob.
+  Future<bool> showBonusAd() async {
+    if (!_showingFullScreenAd && _rewIntReady && _rewIntOffCooldown) {
+      return _showRewardedInterstitial();
+    }
+    return showRewarded();
   }
 
   BannerAd createBanner({required AdSize size, void Function(Ad)? onLoaded}) {
